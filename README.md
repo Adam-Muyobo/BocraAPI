@@ -58,11 +58,14 @@ Each domain package owns its own `entity`, `repository`, `service`, `controller`
 The `user` module owns authentication and authorization data:
 
 - UUID primary identifier
-- email login
-- optional username
+- unique username
+- unique email
+- login by username or email
 - BCrypt password hash
+- user type enum for `INDIVIDUAL`, `ORGANIZATION`, and `ADMIN`
 - role enum
 - account status enum
+- profile completion flag for first-login onboarding
 - account state flags used by Spring Security
 - email verification timestamp
 - last login timestamp
@@ -75,36 +78,50 @@ The `person` module owns BOCRA profile and identity data:
 - UUID primary identifier
 - names and date of birth
 - gender and nationality
-- national ID type and identity numbers
+- one tagged identity field using `nationalIdType` + `identityNumber`
 - phones and residential address
-- occupation and organization details
+- occupation and free-text organization affiliation
 - profile photo URL
 - audit timestamps
 
-`User` and `Person` are linked one-to-one. `User` is responsible for access control, while `Person` carries detailed identity information used by BOCRA workflows.
+### `Organization`
+
+The `organization` module owns organization account profiles and optional organization contacts:
+
+- UUID primary identifier
+- one-to-one owner `User`
+- display name and registration details
+- contact channels and address fields
+- optional logo URL
+- multiple optional contact people
+- optional linking from a contact person to a future real user account
+
+`User` is responsible for access control, while `Person` and `Organization` carry the profile data used by BOCRA workflows.
 
 ## Authentication and Authorization
 
 The API uses stateless JWT authentication with Spring Security:
 
-- `POST /api/v1/auth/register` creates a new applicant user and linked person profile, then generates an email verification token
-- `POST /api/v1/auth/verify-email` activates a newly registered account
-- `POST /api/v1/auth/resend-verification` invalidates previous verification tokens and issues a new one
-- `POST /api/v1/auth/login` authenticates by email and password after the email address is verified
+- `POST /api/v1/auth/register` creates a minimal individual or organization account for first-login onboarding
+- `POST /api/v1/auth/login` authenticates by username or email and password
 - `POST /api/v1/auth/refresh` rotates an opaque refresh token and returns a fresh JWT access token pair
 - `POST /api/v1/auth/logout` revokes a refresh token
 - `GET /api/v1/auth/me` returns the currently authenticated user snapshot
 - `GET /api/v1/users/me` returns the authenticated user plus linked person profile
+- `GET /api/v1/users` is restricted to `ADMIN` and `SUPER_ADMIN`
 - `GET /api/v1/users/{userUuid}` is restricted to `ADMIN` and `SUPER_ADMIN`
-- `GET /api/v1/persons/me` and `PUT /api/v1/persons/me` require authentication
+- `GET /api/v1/persons/me` and `PUT /api/v1/persons/me` manage individual onboarding/profile data
+- `GET /api/v1/organizations/me` and `PUT /api/v1/organizations/me` manage organization profile data
+- `GET /api/v1/organizations/me/contacts`, `POST /api/v1/organizations/me/contacts`, and `PUT /api/v1/organizations/me/contacts/{contactUuid}` manage optional organization contacts
 
 JWT secrets are never hardcoded in source. The application reads them from environment variables.
 
-### Verification and Refresh Token Flow
+### Onboarding and Refresh Token Flow
 
-- Registration creates the `User` in `PENDING_VERIFICATION` state and stores a hashed email verification token in the database
-- Local development can log the generated verification token by setting `EMAIL_VERIFICATION_LOG_GENERATED_TOKEN=true`
-- Verification marks `emailVerifiedAt`, enables the account, and switches the status to `ACTIVE`
+- Registration creates a minimal account and reminds the user that those credentials identify future BOCRA interactions
+- The first successful login should route the frontend into profile onboarding when `profileCompleted=false`
+- Individuals complete a `Person` profile after login instead of during signup
+- Organization accounts complete an `Organization` profile after login and can optionally add multiple contact people
 - Refresh tokens are opaque random values, hashed before persistence, rotated on refresh, and revocable on logout
 - Access tokens remain stateless JWTs and are intentionally short lived compared to refresh tokens
 
@@ -124,6 +141,7 @@ Important variables:
 - `REFRESH_TOKEN_EXPIRATION`
 - `EMAIL_VERIFICATION_EXPIRATION`
 - `EMAIL_VERIFICATION_LOG_GENERATED_TOKEN`
+- `DEMO_DATA_ENABLED`
 - `SERVER_PORT`
 - `CORS_ALLOWED_ORIGINS`
 
@@ -155,6 +173,12 @@ On Windows PowerShell:
 The API base path is `/api/v1`.
 
 On local environments, Flyway automatically runs `src/main/resources/db/migration/V1__initial_security_and_identity_schema.sql` before Hibernate validates the mappings.
+
+Demo accounts are seeded automatically when `DEMO_DATA_ENABLED=true`:
+
+- admin: `bocra.admin` / `Admin#12345`
+- individual: `mothusi.demo` / `Password#123`
+- organization: `demotel.org` / `Password#123`
 
 ## Connecting to MySQL
 
@@ -240,5 +264,6 @@ Recommended rules for new modules:
 ## Current Notes
 
 - The project now uses Flyway for schema creation and keeps Hibernate on `validate` by default
-- Email verification delivery is abstracted behind `VerificationNotificationService`; the default implementation logs tokens only when explicitly enabled for local development
+- Demo data seeding is controlled by `DEMO_DATA_ENABLED` and is intended for local development only
+- Email verification support still exists in the auth module, but the primary local/demo flow now focuses on minimal registration plus first-login onboarding
 - Refresh tokens are persisted as SHA-256 hashes, not plain values

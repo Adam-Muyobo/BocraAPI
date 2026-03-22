@@ -3,7 +3,12 @@
  */
 package bw.org.bocra.api.user.dto;
 
+import bw.org.bocra.api.organization.dto.OrganizationProfileResponse;
 import bw.org.bocra.api.person.dto.PersonProfileResponse;
 
-public record UserProfileResponse(UserSummaryResponse user, PersonProfileResponse person) {
+public record UserProfileResponse(
+        UserSummaryResponse user,
+        PersonProfileResponse person,
+        OrganizationProfileResponse organization
+) {
 }

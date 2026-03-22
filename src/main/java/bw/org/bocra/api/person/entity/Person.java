@@ -33,9 +33,6 @@ public class Person extends BaseEntity {
     @Column(nullable = false, length = 120)
     private String surname;
 
-    @Column(length = 150)
-    private String middleNames;
-
     @Column(nullable = false)
     private LocalDate dateOfBirth;
 
@@ -51,10 +48,7 @@ public class Person extends BaseEntity {
     private NationalIdType nationalIdType;
 
     @Column(nullable = false, length = 120)
-    private String nationalIdNumber;
-
-    @Column(length = 120)
-    private String passportNumber;
+    private String identityNumber;
 
     @Column(nullable = false, length = 30)
     private String phoneNumber;

@@ -1,5 +1,5 @@
 /*
- * Handles applicant registration, credential authentication, and current-user retrieval.
+ * Handles registration, credential authentication, token refresh, and current-user retrieval.
  */
 package bw.org.bocra.api.auth.service;
 
@@ -12,16 +12,17 @@ import bw.org.bocra.api.auth.dto.RegisterRequest;
 import bw.org.bocra.api.auth.dto.RegisterResponse;
 import bw.org.bocra.api.exception.BadRequestException;
 import bw.org.bocra.api.exception.ConflictException;
-import bw.org.bocra.api.person.entity.Person;
-import bw.org.bocra.api.person.enums.NationalIdType;
+import bw.org.bocra.api.organization.service.OrganizationService;
 import bw.org.bocra.api.security.SecurityUser;
 import bw.org.bocra.api.security.jwt.JwtService;
 import bw.org.bocra.api.user.dto.UserProfileResponse;
 import bw.org.bocra.api.user.entity.User;
 import bw.org.bocra.api.user.enums.AccountStatus;
 import bw.org.bocra.api.user.enums.Role;
+import bw.org.bocra.api.user.enums.UserType;
 import bw.org.bocra.api.user.repository.UserRepository;
 import bw.org.bocra.api.user.service.UserService;
+import java.time.Instant;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,6 +30,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+/*
+ * Registration is intentionally minimal so first-login onboarding can collect richer profile data
+ * without overwhelming new users at account creation time.
+ */
 @Service
 public class AuthService {
 
@@ -38,7 +43,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final RefreshTokenService refreshTokenService;
-    private final EmailVerificationService emailVerificationService;
+    private final OrganizationService organizationService;
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -47,7 +52,7 @@ public class AuthService {
             UserRepository userRepository,
             UserService userService,
             RefreshTokenService refreshTokenService,
-            EmailVerificationService emailVerificationService
+            OrganizationService organizationService
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
@@ -55,7 +60,7 @@ public class AuthService {
         this.userRepository = userRepository;
         this.userService = userService;
         this.refreshTokenService = refreshTokenService;
-        this.emailVerificationService = emailVerificationService;
+        this.organizationService = organizationService;
     }
 
     @Transactional
@@ -66,75 +71,60 @@ public class AuthService {
             throw new ConflictException("A user with this email already exists.");
         }
 
-        if (StringUtils.hasText(request.username()) && userRepository.existsByUsernameIgnoreCase(request.username().trim())) {
+        if (userRepository.existsByUsernameIgnoreCase(request.username().trim())) {
             throw new ConflictException("A user with this username already exists.");
         }
 
         User user = new User();
         user.setEmail(request.email().trim().toLowerCase());
-        user.setUsername(trimToNull(request.username()));
+        user.setUsername(request.username().trim());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(Role.APPLICANT);
-        user.setAccountStatus(AccountStatus.PENDING_VERIFICATION);
-        user.setEnabled(false);
+        user.setUserType(request.userType());
+        user.setRole(request.userType() == UserType.ADMIN ? Role.ADMIN : Role.APPLICANT);
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        user.setEnabled(true);
         user.setAccountNonExpired(true);
         user.setAccountNonLocked(true);
         user.setCredentialsNonExpired(true);
+        user.setProfileCompleted(false);
+        user.setEmailVerifiedAt(Instant.now());
 
-        Person person = new Person();
-        person.setForenames(request.forenames().trim());
-        person.setSurname(request.surname().trim());
-        person.setMiddleNames(trimToNull(request.middleNames()));
-        person.setDateOfBirth(request.dateOfBirth());
-        person.setGender(request.gender());
-        person.setNationality(request.nationality().trim());
-        person.setNationalIdType(request.nationalIdType());
-        person.setNationalIdNumber(request.nationalIdNumber().trim());
-        person.setPassportNumber(trimToNull(request.passportNumber()));
-        person.setPhoneNumber(request.phoneNumber().trim());
-        person.setAlternatePhoneNumber(trimToNull(request.alternatePhoneNumber()));
-        person.setResidentialAddressLine1(request.residentialAddressLine1().trim());
-        person.setResidentialAddressLine2(trimToNull(request.residentialAddressLine2()));
-        person.setCity(request.city().trim());
-        person.setDistrict(request.district().trim());
-        person.setCountry(request.country().trim());
-        person.setPostalCode(trimToNull(request.postalCode()));
-        person.setOccupation(trimToNull(request.occupation()));
-        person.setOrganizationName(trimToNull(request.organizationName()));
-        person.setProfilePhotoUrl(trimToNull(request.profilePhotoUrl()));
+        if (request.userType() == UserType.ORGANIZATION) {
+            user.attachOrganization(organizationService.createMinimalOrganization(user, request.organizationDisplayName()));
+        }
 
-        user.attachPerson(person);
         User savedUser = userRepository.save(user);
-        java.time.Instant verificationTokenExpiresAt = emailVerificationService.createAndDispatch(savedUser);
+        organizationService.linkContactsToUserIfPossible(savedUser);
 
         return new RegisterResponse(
-                "Registration completed. Verify your email address before logging in.",
-                verificationTokenExpiresAt,
-                true,
+                "Registration completed successfully. These account details identify you in all future BOCRA interactions.",
                 userService.toUserProfileResponse(savedUser)
         );
     }
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email().trim(), request.password()));
+        String identifier = request.identifier().trim();
+        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(identifier, request.password()));
 
-        User user = userRepository.findWithPersonByEmailIgnoreCase(request.email().trim())
+        User user = userRepository.findWithProfileByIdentifier(identifier)
                 .orElseThrow(() -> new BadRequestException("User account not found."));
 
-        user.setLastLoginAt(java.time.Instant.now());
-
+        user.setLastLoginAt(Instant.now());
+        organizationService.linkContactsToUserIfPossible(user);
         return buildLoginResponse(user);
     }
 
     @Transactional
     public LoginResponse refresh(RefreshTokenRequest request) {
+        RefreshTokenService.IssuedRefreshToken replacement;
         var existingToken = refreshTokenService.requireActive(request.refreshToken());
-        User user = userRepository.findWithPersonByUuid(existingToken.getUser().getUuid())
+        User user = userRepository.findWithProfileByUuid(existingToken.getUser().getUuid())
                 .orElseThrow(() -> new BadRequestException("User account not found."));
 
         TokenBundle tokenBundle = issueTokenBundle(user);
-        refreshTokenService.revokeAndReplace(existingToken, tokenBundle.refreshToken());
+        replacement = tokenBundle.refreshToken();
+        refreshTokenService.revokeAndReplace(existingToken, replacement);
         return tokenBundle.response();
     }
 
@@ -150,16 +140,17 @@ public class AuthService {
     }
 
     private void validateRegistrationRequest(RegisterRequest request) {
-        if (request.nationalIdType() == NationalIdType.PASSPORT && !StringUtils.hasText(request.passportNumber())) {
-            throw new BadRequestException("Passport number is required when national ID type is PASSPORT.");
+        if (request.userType() == null) {
+            throw new BadRequestException("User type is required.");
         }
-    }
 
-    private String trimToNull(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
+        if (request.userType() == UserType.ORGANIZATION && !StringUtils.hasText(request.organizationDisplayName())) {
+            throw new BadRequestException("Organization name is required for organization accounts.");
         }
-        return value.trim();
+
+        if (request.userType() != UserType.ORGANIZATION && StringUtils.hasText(request.organizationDisplayName())) {
+            throw new BadRequestException("Organization name can only be provided for organization accounts.");
+        }
     }
 
     private LoginResponse buildLoginResponse(User user) {
@@ -169,10 +160,7 @@ public class AuthService {
     private TokenBundle issueTokenBundle(User user) {
         UserProfileResponse userProfileResponse = userService.toUserProfileResponse(user);
         String accessToken = jwtService.generateToken(SecurityUser.from(user));
-        RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokenService.issue(
-                user,
-                jwtService.refreshTokenExpirationMs()
-        );
+        RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokenService.issue(user, jwtService.refreshTokenExpirationMs());
 
         return new TokenBundle(
                 new LoginResponse(

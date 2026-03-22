@@ -71,7 +71,13 @@ public class SecurityConfig {
                                 "/auth/resend-verification",
                                 "/auth/logout"
                         ).permitAll()
-                        .requestMatchers("/users/me", "/persons/me", "/auth/me").authenticated()
+                        .requestMatchers(
+                                "/users/me",
+                                "/persons/me",
+                                "/auth/me",
+                                "/organizations/me",
+                                "/organizations/me/**"
+                        ).authenticated()
                         .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                         .anyRequest().authenticated()
                 )
@@ -100,7 +106,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(applicationProperties.security().cors().allowedOrigins());
+        configuration.setAllowedOriginPatterns(applicationProperties.security().cors().allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setAllowCredentials(true);

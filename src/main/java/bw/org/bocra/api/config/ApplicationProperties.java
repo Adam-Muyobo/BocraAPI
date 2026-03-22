@@ -7,7 +7,7 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "application")
-public record ApplicationProperties(Security security) {
+public record ApplicationProperties(Security security, Seed seed) {
 
     public record Security(Jwt jwt, RefreshToken refreshToken, EmailVerification emailVerification, Cors cors) {
     }
@@ -22,5 +22,8 @@ public record ApplicationProperties(Security security) {
     }
 
     public record Cors(List<String> allowedOrigins) {
+    }
+
+    public record Seed(boolean demoDataEnabled) {
     }
 }
