@@ -1,0 +1,7 @@
+* @Adam-Muyobo
+
+/Dockerfile @Adam-Muyobo
+/docker-compose.yml @Adam-Muyobo
+/.github/workflows/ @Adam-Muyobo
+/.env.example @Adam-Muyobo
+/src/main/resources/application*.yml @Adam-Muyobo

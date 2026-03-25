@@ -106,6 +106,7 @@ The API uses stateless JWT authentication with Spring Security:
 - `POST /api/v1/auth/login` authenticates by username or email and password
 - `POST /api/v1/auth/refresh` rotates an opaque refresh token and returns a fresh JWT access token pair
 - `POST /api/v1/auth/logout` revokes a refresh token
+- `GET /api/v1/health` returns a public health status for local checks and Render probes
 - `GET /api/v1/auth/me` returns the currently authenticated user snapshot
 - `GET /api/v1/users/me` returns the authenticated user plus linked person profile
 - `GET /api/v1/users` is restricted to `ADMIN` and `SUPER_ADMIN`
@@ -210,14 +211,27 @@ This repository assumes:
 
 Recommended Render settings:
 
-- build command: `./mvnw clean package -DskipTests`
-- start command: `java -jar target/api-0.0.1-SNAPSHOT.jar`
-- set the datasource and JWT variables in the Render dashboard
+- runtime: Docker using the repository `Dockerfile`
+- container port: `8080`
+- set the datasource, JWT, and CORS variables in the Render dashboard
+- set `SPRING_PROFILES_ACTIVE=production`
 - keep `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` in Render so production never mutates schema implicitly
+- keep `DEMO_DATA_ENABLED=false` in Render
 
 ## Docker
 
-The included `Dockerfile` containerizes only the Spring Boot API, which matches the intended deployment model where MySQL is hosted separately.
+The included `Dockerfile` containerizes only the Spring Boot API, which matches the intended deployment model where MySQL is hosted separately in production.
+
+For local development, use `docker-compose.yml` to run the API and MySQL together:
+
+```bash
+docker compose up --build
+```
+
+This local stack exposes:
+
+- API on `http://localhost:8081/api/v1`
+- MySQL on `localhost:3306`
 
 Build and run locally:
 
@@ -235,6 +249,10 @@ docker run --env-file .env.local -p 8080:8080 bocra-api
 - Use HTTPS in production and enforce SSL when connecting to Aiven
 - Keep `EMAIL_VERIFICATION_LOG_GENERATED_TOKEN=false` outside local development
 - Integrate a real email provider behind the verification notification service before production launch
+
+## Deployment Checklist
+
+See `docs/render-aiven-deployment.md` for the Render and Aiven rollout checklist and required production environment variables.
 
 ## Entity Package Pattern For Future Modules
 
