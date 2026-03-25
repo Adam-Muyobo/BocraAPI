@@ -21,9 +21,6 @@ public record UpdatePersonProfileRequest(
         @Size(max = 120, message = "Surname must not exceed 120 characters.")
         String surname,
 
-        @Size(max = 150, message = "Middle names must not exceed 150 characters.")
-        String middleNames,
-
         @NotNull(message = "Date of birth is required.")
         @Past(message = "Date of birth must be in the past.")
         LocalDate dateOfBirth,
@@ -38,12 +35,9 @@ public record UpdatePersonProfileRequest(
         @NotNull(message = "National ID type is required.")
         NationalIdType nationalIdType,
 
-        @NotBlank(message = "National ID number is required.")
-        @Size(max = 120, message = "National ID number must not exceed 120 characters.")
-        String nationalIdNumber,
-
-        @Size(max = 120, message = "Passport number must not exceed 120 characters.")
-        String passportNumber,
+        @NotBlank(message = "Identity number is required.")
+        @Size(max = 120, message = "Identity number must not exceed 120 characters.")
+        String identityNumber,
 
         @NotBlank(message = "Phone number is required.")
         @Pattern(regexp = "^[+0-9 -]{7,30}$", message = "Phone number format is invalid.")

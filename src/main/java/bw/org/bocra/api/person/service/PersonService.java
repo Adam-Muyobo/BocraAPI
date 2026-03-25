@@ -8,9 +8,11 @@ import bw.org.bocra.api.exception.ResourceNotFoundException;
 import bw.org.bocra.api.person.dto.PersonProfileResponse;
 import bw.org.bocra.api.person.dto.UpdatePersonProfileRequest;
 import bw.org.bocra.api.person.entity.Person;
-import bw.org.bocra.api.person.enums.NationalIdType;
 import bw.org.bocra.api.person.repository.PersonRepository;
 import bw.org.bocra.api.security.SecurityUtils;
+import bw.org.bocra.api.user.entity.User;
+import bw.org.bocra.api.user.enums.UserType;
+import bw.org.bocra.api.user.repository.UserRepository;
 import bw.org.bocra.api.user.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +22,12 @@ import org.springframework.util.StringUtils;
 public class PersonService {
 
     private final PersonRepository personRepository;
+    private final UserRepository userRepository;
     private final UserService userService;
 
-    public PersonService(PersonRepository personRepository, UserService userService) {
+    public PersonService(PersonRepository personRepository, UserRepository userRepository, UserService userService) {
         this.personRepository = personRepository;
+        this.userRepository = userRepository;
         this.userService = userService;
     }
 
@@ -36,20 +40,22 @@ public class PersonService {
 
     @Transactional
     public PersonProfileResponse updateCurrentProfile(UpdatePersonProfileRequest request) {
-        validateDocumentFields(request.nationalIdType(), request.passportNumber());
+        User user = userRepository.findWithProfileByUuid(SecurityUtils.currentUserUuid())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
-        Person person = personRepository.findByUserUuid(SecurityUtils.currentUserUuid())
-                .orElseThrow(() -> new ResourceNotFoundException("Person profile not found."));
+        if (user.getUserType() == UserType.ORGANIZATION) {
+            throw new BadRequestException("Organization accounts should manage contacts separately from personal profiles.");
+        }
+
+        Person person = personRepository.findByUserUuid(user.getUuid()).orElseGet(() -> createPerson(user));
 
         person.setForenames(request.forenames().trim());
         person.setSurname(request.surname().trim());
-        person.setMiddleNames(trimToNull(request.middleNames()));
         person.setDateOfBirth(request.dateOfBirth());
         person.setGender(request.gender());
         person.setNationality(request.nationality().trim());
         person.setNationalIdType(request.nationalIdType());
-        person.setNationalIdNumber(request.nationalIdNumber().trim());
-        person.setPassportNumber(trimToNull(request.passportNumber()));
+        person.setIdentityNumber(request.identityNumber().trim());
         person.setPhoneNumber(request.phoneNumber().trim());
         person.setAlternatePhoneNumber(trimToNull(request.alternatePhoneNumber()));
         person.setResidentialAddressLine1(request.residentialAddressLine1().trim());
@@ -61,14 +67,15 @@ public class PersonService {
         person.setOccupation(trimToNull(request.occupation()));
         person.setOrganizationName(trimToNull(request.organizationName()));
         person.setProfilePhotoUrl(trimToNull(request.profilePhotoUrl()));
+        user.setProfileCompleted(true);
 
         return userService.toPersonProfileResponse(person);
     }
 
-    private void validateDocumentFields(NationalIdType nationalIdType, String passportNumber) {
-        if (nationalIdType == NationalIdType.PASSPORT && !StringUtils.hasText(passportNumber)) {
-            throw new BadRequestException("Passport number is required when national ID type is PASSPORT.");
-        }
+    private Person createPerson(User user) {
+        Person person = new Person();
+        user.attachPerson(person);
+        return person;
     }
 
     private String trimToNull(String value) {

@@ -5,7 +5,9 @@ package bw.org.bocra.api.user.controller;
 
 import bw.org.bocra.api.common.dto.ApiResponse;
 import bw.org.bocra.api.user.dto.UserProfileResponse;
+import bw.org.bocra.api.user.dto.UserSummaryResponse;
 import bw.org.bocra.api.user.service.UserService;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +29,12 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getCurrentUserProfile() {
         return ResponseEntity.ok(ApiResponse.success("Current user profile retrieved successfully.", userService.getCurrentUserProfile()));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> listUsers() {
+        return ResponseEntity.ok(ApiResponse.success("Users retrieved successfully.", userService.listUsers()));
     }
 
     @GetMapping("/{userUuid}")

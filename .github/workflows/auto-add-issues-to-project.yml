@@ -1,0 +1,16 @@
+# Adds newly opened backend issues to the BOCRA Website GitHub project when a project-scoped token is configured.
+name: Auto Add Issues To BOCRA Project
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add issue to BOCRA Website project
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/Adam-Muyobo/projects/6
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}

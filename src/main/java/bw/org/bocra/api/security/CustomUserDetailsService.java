@@ -1,5 +1,5 @@
 /*
- * Loads authenticated users by email for Spring Security authentication flows.
+ * Loads authenticated users by username or email for Spring Security authentication flows.
  */
 package bw.org.bocra.api.security;
 
@@ -20,7 +20,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) {
-        return userRepository.findByEmailIgnoreCase(username)
+        return userRepository.findByEmailOrUsername(username)
                 .map(SecurityUser::from)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found."));
     }

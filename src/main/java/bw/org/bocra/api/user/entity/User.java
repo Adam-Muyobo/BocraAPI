@@ -4,9 +4,11 @@
 package bw.org.bocra.api.user.entity;
 
 import bw.org.bocra.api.common.entity.BaseEntity;
+import bw.org.bocra.api.organization.entity.Organization;
 import bw.org.bocra.api.person.entity.Person;
 import bw.org.bocra.api.user.enums.AccountStatus;
 import bw.org.bocra.api.user.enums.Role;
+import bw.org.bocra.api.user.enums.UserType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -29,6 +31,10 @@ public class User extends BaseEntity {
 
     @Column(unique = true)
     private String username;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private UserType userType;
 
     @Column(nullable = false, unique = true, length = 150)
     private String email;
@@ -56,6 +62,9 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private boolean isAccountNonExpired;
 
+    @Column(nullable = false)
+    private boolean profileCompleted;
+
     private Instant emailVerifiedAt;
 
     private Instant lastLoginAt;
@@ -63,8 +72,16 @@ public class User extends BaseEntity {
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Person person;
 
+    @OneToOne(mappedBy = "ownerUser", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Organization organization;
+
     public void attachPerson(Person person) {
         this.person = person;
         person.setUser(this);
+    }
+
+    public void attachOrganization(Organization organization) {
+        this.organization = organization;
+        organization.setOwnerUser(this);
     }
 }
